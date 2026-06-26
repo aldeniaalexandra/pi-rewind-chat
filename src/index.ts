@@ -1,10 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isGitRepo, createCheckpoint, serializeCheckpoints, deserializeCheckpoints } from "./checkpoints";
+import { isGitRepo, createCheckpoint } from "./checkpoints";
 import type { CheckpointMap } from "./checkpoints";
 import { executeRewind } from "./rewind";
 import { executeUndo } from "./undo";
-
-const CUSTOM_TYPE = "pi-rewind-chat";
 
 export default function (pi: ExtensionAPI) {
   const checkpoints: CheckpointMap = new Map();
@@ -20,21 +18,10 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
-    // Load checkpoints from persisted custom entries
-    const entries = ctx.sessionManager.getEntries();
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const entry = entries[i] as any;
-      if (entry.type === "custom" && entry.customType === CUSTOM_TYPE) {
-        const data = entry.data;
-        if (data?.checkpoints) {
-          const loaded = deserializeCheckpoints(data.checkpoints);
-          for (const [key, value] of loaded) {
-            checkpoints.set(key, value);
-          }
-        }
-        break; // Use the latest custom entry
-      }
-    }
+    // Note: We no longer persist checkpoints to session.
+    // Checkpoints are stored in-memory only per session lifetime.
+    // The old approach used pi.appendEntry() which caused feedback loops
+    // (repeated "Good" messages with thumbs up responses).
 
     ctx.ui.setStatus("rewind-chat", `◆ ${checkpoints.size} checkpoints`);
   });
@@ -69,13 +56,10 @@ export default function (pi: ExtensionAPI) {
     if (checkpoint) {
       checkpoints.set(userEntryId, checkpoint);
 
-      // Persist to session
-      pi.sendMessage({
-        customType: CUSTOM_TYPE,
-        content: `Checkpoint saved for: ${userPrompt.slice(0, 50)}`,
-        display: false,
-        details: { checkpoints: serializeCheckpoints(checkpoints) },
-      });
+      // Note: checkpoints are stored in-memory only.
+      // Previously we used pi.appendEntry() here, but that caused
+      // repeated "Good" messages + thumbs up loops because appendEntry
+      // can trigger re-renders or agent turns.
 
       ctx.ui.setStatus("rewind-chat", `◆ ${checkpoints.size} checkpoints`);
     }
