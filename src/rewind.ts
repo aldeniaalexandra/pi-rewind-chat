@@ -58,7 +58,7 @@ export async function executeRewind(
   const messages = getUserMessages(ctx);
 
   if (messages.length <= 1) {
-    ctx.ui.notify("No messages to rewind to", "info");
+    ctx.ui.notify("Chat baru dimulai, belum ada yang bisa di-rewind", "info");
     return;
   }
 
@@ -71,7 +71,7 @@ export async function executeRewind(
     return `${i + 1}. ${m.text}  ${fileLabel}`;
   });
 
-  const selected = await ctx.ui.select("Pilih chat untuk rewind:", choices);
+  const selected = await ctx.ui.select("Pilih pesan untuk rewind:", choices);
 
   if (!selected) {
     ctx.ui.notify("Rewind dibatalkan", "info");
@@ -122,9 +122,9 @@ export async function executeRewind(
       ctx.ui.notify("Code di-rollback", "info");
     }
 
-    ctx.ui.notify(`Rewind ke "${target.text}" berhasil!`, "info");
-    ctx.ui.notify("Ketik /tree untuk navigate ke chat sebelumnya", "info");
-    ctx.ui.notify("Ketik /rewind-undo untuk membatalkan rewind code", "info");
+    ctx.ui.notify(`✓ Rewind ke "${target.text}" berhasil!`, "info");
+    ctx.ui.notify("Ketik /tree untuk lihat chat sebelumnya", "info");
+    ctx.ui.notify("Ketik /rewind-undo untuk batalkan", "info");
   } catch (error) {
     ctx.ui.notify(`Rewind gagal: ${error}`, "error");
   }

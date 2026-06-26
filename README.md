@@ -10,6 +10,8 @@ Per-message rewind extension for the [Pi coding agent](https://pi.dev).
 - Preview affected files before confirming
 - Undo support for accidental rewinds
 
+> **Note:** Checkpoints are stored in-memory per session. They won't persist if you restart Pi. This prevents feedback loops that could cause infinite message cycles.
+
 ## Install
 
 ```bash

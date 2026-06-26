@@ -14,7 +14,7 @@ export default function (pi: ExtensionAPI) {
     isGit = await isGitRepo(ctx.cwd);
 
     if (!isGit) {
-      ctx.ui.setStatus("rewind-chat", "⚠ not git repo");
+      ctx.ui.setStatus("rewind-chat", "⚠ not a git repo");
       return;
     }
 

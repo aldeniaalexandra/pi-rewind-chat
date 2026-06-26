@@ -29,7 +29,7 @@ export async function executeUndo(
     unlinkSync(backupPathRef.current);
     backupPathRef.current = null;
 
-    ctx.ui.notify("Rewind berhasil di-undo! Restart session untuk melihat perubahan.", "info");
+    ctx.ui.notify("✓ Rewind berhasil di-undo! Restart session untuk lihat perubahan.", "info");
   } catch (error) {
     ctx.ui.notify(`Undo gagal: ${error}`, "error");
   }

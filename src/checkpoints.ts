@@ -82,14 +82,11 @@ export async function restoreCheckpoint(
   cwd: string,
   checkpoint: Checkpoint,
 ): Promise<void> {
-  // Reset tracked files to clean state first
-  await git(["checkout", "--", "."], cwd);
-
-  // Apply the stash
+  // Try to apply the stash (this restores files to checkpoint state)
   try {
-    await git(["stash", "apply", checkpoint.stashSha], cwd);
+    await git(["stash", "apply", "--index", checkpoint.stashSha], cwd);
   } catch {
-    // If stash apply fails, try direct checkout from SHA
+    // Fallback: checkout files directly from the stash SHA
     await git(["checkout", checkpoint.stashSha, "--", "."], cwd);
   }
 }
