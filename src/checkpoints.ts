@@ -53,9 +53,9 @@ export async function createCheckpoint(
     return null; // Clean working tree, no checkpoint needed
   }
 
-  // Create stash with untracked files
+  // Create stash including untracked files
   const stashResult = await git(
-    ["stash", "create", "-m", `pi-rewind-chat:${entryId}`],
+    ["stash", "create", "--include-untracked", "-m", `pi-rewind-chat:${entryId}`],
     cwd,
   );
 
@@ -82,11 +82,8 @@ export async function restoreCheckpoint(
   cwd: string,
   checkpoint: Checkpoint,
 ): Promise<void> {
-  // Reset working tree to clean state first
+  // Reset tracked files to clean state first
   await git(["checkout", "--", "."], cwd);
-
-  // Remove untracked files that were added after checkpoint
-  await git(["clean", "-fd"], cwd);
 
   // Apply the stash
   try {
