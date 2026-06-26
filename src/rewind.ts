@@ -122,11 +122,9 @@ export async function executeRewind(
       ctx.ui.notify("Code di-rollback", "info");
     }
 
-    // 3. Truncate session (move leaf to target entry)
-    ctx.sessionManager.branch(target.id);
-
     ctx.ui.notify(`Rewind ke "${target.text}" berhasil!`, "info");
-    ctx.ui.notify("Ketik /rewind-undo untuk membatalkan", "info");
+    ctx.ui.notify("Ketik /tree untuk navigate ke chat sebelumnya", "info");
+    ctx.ui.notify("Ketik /rewind-undo untuk membatalkan rewind code", "info");
   } catch (error) {
     ctx.ui.notify(`Rewind gagal: ${error}`, "error");
   }
