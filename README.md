@@ -17,10 +17,10 @@ Per-message rewind extension for the [Pi coding agent](https://pi.dev).
 pi install npm:pi-rewind-chat
 
 # From GitHub
-pi install github.com/user/pi-rewind-chat
+pi install github.com/aldeniaalexandra/pi-rewind-chat
 
 # For development
-git clone github.com/user/pi-rewind-chat
+git clone github.com/aldeniaalexandra/pi-rewind-chat
 pi -e ./pi-rewind-chat/src/index.ts
 ```
 
