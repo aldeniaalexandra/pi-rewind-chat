@@ -1,6 +1,6 @@
 {
   "name": "pi-rewind-chat",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Per-message rewind extension for Pi coding agent. Rollback code, chat history, and AI context to any previous message.",
   "main": "src/index.ts",
   "pi": {
@@ -19,7 +19,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aldeniaalexandra/pi-rewind-chat"
+    "url": "git+https://github.com/aldeniaalexandra/pi-rewind-chat.git"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.3",
