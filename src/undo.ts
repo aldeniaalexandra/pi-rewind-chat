@@ -21,7 +21,7 @@ export async function executeUndo(
   try {
     // 1. Undo code rollback: restore the pre-rewind snapshot
     if (lastRewind.preRewindCheckpoint) {
-      await restoreCheckpoint(ctx.cwd, lastRewind.preRewindCheckpoint);
+      restoreCheckpoint(lastRewind.preRewindCheckpoint);
       ctx.ui.notify("Code dikembalikan ke sebelum rewind", "info");
     }
 

@@ -1,37 +1,34 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isGitRepo, createCheckpoint } from "./checkpoints";
-import type { CheckpointMap } from "./checkpoints";
+import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { captureFileBeforeChange, finalizeCheckpoint } from "./checkpoints";
+import type { CheckpointMap, PendingSnapshot } from "./checkpoints";
 import { executeRewind } from "./rewind";
 import type { LastRewind } from "./rewind";
 import { executeUndo } from "./undo";
 
 export default function (pi: ExtensionAPI) {
   const checkpoints: CheckpointMap = new Map();
+  const pendingSnapshot: PendingSnapshot = new Map();
   const rewindStack: LastRewind[] = [];
-  let isGit = false;
 
-  // Check git repo and load persisted checkpoints on session start
-  pi.on("session_start", async (_event, ctx) => {
-    isGit = await isGitRepo(ctx.cwd);
-
-    if (!isGit) {
-      ctx.ui.setStatus("rewind-chat", "⚠ not a git repo");
-      return;
-    }
-
-    // Note: We no longer persist checkpoints to session.
-    // Checkpoints are stored in-memory only per session lifetime.
-    // The old approach used pi.appendEntry() which caused feedback loops
-    // (repeated "Good" messages with thumbs up responses).
-
+  pi.on("session_start", (_event, ctx) => {
+    // Note: checkpoints are stored in-memory only, not persisted to the session.
+    // An earlier approach used pi.appendEntry() to persist them, but that caused
+    // feedback loops (repeated "Good" messages with thumbs up responses).
     ctx.ui.setStatus("rewind-chat", `◆ ${checkpoints.size} checkpoints`);
   });
 
-  // Create checkpoint after each agent turn (when user message is processed)
-  pi.on("agent_end", async (event, ctx) => {
-    if (!isGit) return;
+  // Capture each file's content the moment before a tool edits or overwrites it.
+  // This is the same "snapshot tool-touched files" approach Claude Code uses for
+  // code rewind: no git required, no dependency on the working tree being clean.
+  pi.on("tool_call", (event, ctx) => {
+    if (isToolCallEventType("edit", event) || isToolCallEventType("write", event)) {
+      captureFileBeforeChange(pendingSnapshot, ctx.cwd, event.input.path);
+    }
+  });
 
-    // Find the user message entry for this turn
+  // Finalize the turn's checkpoint once the agent loop for this user message ends.
+  pi.on("agent_end", (_event, ctx) => {
     const branch = ctx.sessionManager.getBranch();
     let userEntryId: string | null = null;
     let userPrompt = "";
@@ -51,17 +48,10 @@ export default function (pi: ExtensionAPI) {
 
     if (!userEntryId) return;
 
-    // Create checkpoint
-    const checkpoint = await createCheckpoint(ctx.cwd, userEntryId, userPrompt);
+    const checkpoint = finalizeCheckpoint(pendingSnapshot, userPrompt);
 
     if (checkpoint) {
       checkpoints.set(userEntryId, checkpoint);
-
-      // Note: checkpoints are stored in-memory only.
-      // Previously we used pi.appendEntry() here, but that caused
-      // repeated "Good" messages + thumbs up loops because appendEntry
-      // can trigger re-renders or agent turns.
-
       ctx.ui.setStatus("rewind-chat", `◆ ${checkpoints.size} checkpoints`);
     }
   });
@@ -70,10 +60,6 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("rewind", {
     description: "Rewind to a previous user message (code + chat rollback)",
     handler: async (args, ctx) => {
-      if (!isGit) {
-        ctx.ui.notify("Rewind hanya tersedia di git repository", "error");
-        return;
-      }
       await executeRewind(args, ctx, checkpoints, rewindStack);
     },
   });

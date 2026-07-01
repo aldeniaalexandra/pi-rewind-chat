@@ -6,7 +6,7 @@ Per-message rewind extension for the [Pi coding agent](https://pi.dev).
 
 - `/rewind` — Pick any user message, rollback code, chat, or both to that point
 - `/rewind-undo` — Reverse the last rewind (repeatable — walks back through multiple rewinds)
-- Automatic git checkpoints per user message, pinned against `git gc`
+- Code checkpoints work like Claude Code's: snapshot the pre-edit content of files touched by tool calls each turn, no git required
 - Chat rewind is non-destructive: it moves the conversation branch pointer (via Pi's native tree navigation), it doesn't delete history
 - Preview affected files and scope (code/chat/both) before confirming
 
@@ -37,7 +37,6 @@ pi -e ./pi-rewind-chat/src/index.ts
 
 ## Requirements
 
-- Git repository (extension disables itself in non-git directories)
 - Pi coding agent v0.79+
 
 ## License

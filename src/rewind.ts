@@ -1,6 +1,6 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Checkpoint, CheckpointMap } from "./checkpoints";
-import { createCheckpoint, restoreCheckpoint, getDiffFiles } from "./checkpoints";
+import { restoreCheckpoint, getDiffFiles, snapshotPaths } from "./checkpoints";
 
 export type RewindScope = "both" | "code" | "chat";
 
@@ -59,7 +59,7 @@ export async function executeRewind(
   const targetMessages = messages.slice(0, -1);
   const choices = targetMessages.map((m, i) => {
     const cp = checkpoints.get(m.id);
-    const fileCount = cp?.filesChanged ?? 0;
+    const fileCount = cp?.files.size ?? 0;
     const fileLabel = fileCount > 0 ? `(${fileCount} file)` : "(0 file)";
     return `${i + 1}. ${m.text}  ${fileLabel}`;
   });
@@ -99,7 +99,7 @@ export async function executeRewind(
   let previewText = `Rewind ke: "${target.text}"\n\n`;
 
   if (checkpoint && scope !== "chat") {
-    const diff = await getDiffFiles(cwd, checkpoint);
+    const diff = getDiffFiles(cwd, checkpoint);
 
     if (diff.added.length + diff.modified.length + diff.deleted.length > 0) {
       previewText += "Code rollback:\n";
@@ -127,14 +127,15 @@ export async function executeRewind(
   try {
     const lastRewind: LastRewind = { oldLeafId: null, preRewindCheckpoint: null };
 
-    // 1. Rewind code: snapshot current tree first (for undo), then restore checkpoint
+    // 1. Rewind code: snapshot the current content of the affected files first
+    //    (so undo can restore them), then write back the checkpoint's pre-images.
     if (checkpoint && scope !== "chat") {
-      lastRewind.preRewindCheckpoint = await createCheckpoint(
-        cwd,
-        `undo:${target.id}:${Date.now()}`,
-        `pre-rewind snapshot before restoring to "${target.text}"`,
-      );
-      await restoreCheckpoint(cwd, checkpoint);
+      lastRewind.preRewindCheckpoint = {
+        prompt: `pre-rewind snapshot before restoring to "${target.text}"`.slice(0, 100),
+        timestamp: Date.now(),
+        files: snapshotPaths(checkpoint.files.keys()),
+      };
+      restoreCheckpoint(checkpoint);
       ctx.ui.notify("Code di-rollback", "info");
     }
 
