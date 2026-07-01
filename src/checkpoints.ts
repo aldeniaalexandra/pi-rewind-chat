@@ -10,6 +10,13 @@ export interface Checkpoint {
 export type CheckpointMap = Map<string, Checkpoint>;
 
 /**
+ * Ref path used to pin a checkpoint's stash commit against garbage collection.
+ */
+function refForEntry(entryId: string): string {
+  return `refs/pi-rewind-chat/${entryId}`;
+}
+
+/**
  * Run a git command and return stdout.
  */
 export function git(args: string[], cwd: string): Promise<string> {
@@ -62,6 +69,11 @@ export async function createCheckpoint(
   if (!stashResult) {
     return null;
   }
+
+  // Pin the stash commit to a ref so it survives garbage collection.
+  // `stash create` returns a dangling commit not referenced by refs/stash,
+  // so without this it can be GC'd before the checkpoint is ever restored.
+  await git(["update-ref", refForEntry(entryId), stashResult], cwd);
 
   // Count changed files
   const filesChanged = status.trim().split("\n").length;

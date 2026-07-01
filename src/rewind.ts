@@ -1,7 +1,16 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { CheckpointMap } from "./checkpoints";
-import { restoreCheckpoint, getDiffFiles } from "./checkpoints";
-import { copyFileSync, existsSync } from "fs";
+import type { Checkpoint, CheckpointMap } from "./checkpoints";
+import { createCheckpoint, restoreCheckpoint, getDiffFiles } from "./checkpoints";
+
+export type RewindScope = "both" | "code" | "chat";
+
+/** State needed by /rewind-undo to reverse the last rewind. */
+export interface LastRewind {
+  /** Leaf id before navigateTree moved it. Undo jumps back here. Null if chat wasn't rewound. */
+  oldLeafId: string | null;
+  /** Snapshot of the working tree taken right before restoring code, if code was rewound. */
+  preRewindCheckpoint: Checkpoint | null;
+}
 
 /**
  * Collect user messages from the current session branch.
@@ -28,31 +37,15 @@ function getUserMessages(ctx: ExtensionCommandContext) {
 }
 
 /**
- * Backup the current session file before rewind.
- * Returns the backup path.
- */
-function backupSession(sessionFile: string): string {
-  const backupPath = `${sessionFile}.rewind-backup`;
-  copyFileSync(sessionFile, backupPath);
-  return backupPath;
-}
-
-/**
  * Execute the rewind operation.
  */
 export async function executeRewind(
   args: string,
   ctx: ExtensionCommandContext,
   checkpoints: CheckpointMap,
-  backupPathRef: { current: string | null },
+  rewindStack: LastRewind[],
 ): Promise<void> {
   const cwd = ctx.cwd;
-  const sessionFile = ctx.sessionManager.getSessionFile();
-
-  if (!sessionFile) {
-    ctx.ui.notify("No active session file found", "error");
-    return;
-  }
 
   // Get user messages
   const messages = getUserMessages(ctx);
@@ -85,10 +78,27 @@ export async function executeRewind(
   const target = targetMessages[selectedIndex];
   const checkpoint = checkpoints.get(target.id);
 
+  // Ask what to rewind: code, chat, or both
+  let scope: RewindScope = "both";
+  if (checkpoint) {
+    const scopeChoice = await ctx.ui.select("Rewind apa saja?", [
+      "Code + Chat",
+      "Code saja",
+      "Chat saja",
+    ]);
+    if (!scopeChoice) {
+      ctx.ui.notify("Rewind dibatalkan", "info");
+      return;
+    }
+    scope = scopeChoice === "Code saja" ? "code" : scopeChoice === "Chat saja" ? "chat" : "both";
+  } else {
+    scope = "chat"; // No checkpoint recorded for this message, only chat can be rewound
+  }
+
   // Show preview
   let previewText = `Rewind ke: "${target.text}"\n\n`;
 
-  if (checkpoint) {
+  if (checkpoint && scope !== "chat") {
     const diff = await getDiffFiles(cwd, checkpoint);
 
     if (diff.added.length + diff.modified.length + diff.deleted.length > 0) {
@@ -100,9 +110,11 @@ export async function executeRewind(
     }
   }
 
-  const messagesAfter = messages.length - selectedIndex - 1;
-  previewText += `Chat setelah ini (${messagesAfter} pesan) akan dihapus permanen.\n`;
-  previewText += "Backup disimpan untuk undo.\n";
+  if (scope !== "code") {
+    const messagesAfter = messages.length - selectedIndex - 1;
+    previewText += `Chat setelah ini (${messagesAfter} pesan) akan dipindah ke cabang terpisah.\n`;
+    previewText += "Bisa diakses lagi lewat /rewind-undo atau /tree.\n";
+  }
 
   const confirmed = await ctx.ui.confirm("Konfirmasi Rewind", previewText);
 
@@ -113,18 +125,35 @@ export async function executeRewind(
 
   // Execute rewind
   try {
-    // 1. Backup session
-    backupPathRef.current = backupSession(sessionFile);
+    const lastRewind: LastRewind = { oldLeafId: null, preRewindCheckpoint: null };
 
-    // 2. Restore code if checkpoint exists
-    if (checkpoint) {
+    // 1. Rewind code: snapshot current tree first (for undo), then restore checkpoint
+    if (checkpoint && scope !== "chat") {
+      lastRewind.preRewindCheckpoint = await createCheckpoint(
+        cwd,
+        `undo:${target.id}:${Date.now()}`,
+        `pre-rewind snapshot before restoring to "${target.text}"`,
+      );
       await restoreCheckpoint(cwd, checkpoint);
       ctx.ui.notify("Code di-rollback", "info");
     }
 
-    ctx.ui.notify(`✓ Rewind ke "${target.text}" berhasil!`, "info");
-    ctx.ui.notify("Ketik /tree untuk lihat chat sebelumnya", "info");
-    ctx.ui.notify("Ketik /rewind-undo untuk batalkan", "info");
+    // 2. Rewind chat: move the leaf pointer non-destructively (existing entries kept intact)
+    if (scope !== "code") {
+      lastRewind.oldLeafId = ctx.sessionManager.getLeafId();
+      const result = await ctx.navigateTree(target.id, { label: "rewind" });
+      if (result.cancelled) {
+        ctx.ui.notify("Rewind chat dibatalkan", "info");
+        lastRewind.oldLeafId = null;
+      } else {
+        ctx.ui.notify("Chat di-rewind (histori lama tetap tersimpan di cabang)", "info");
+      }
+    }
+
+    rewindStack.push(lastRewind);
+
+    ctx.ui.notify(`Rewind ke "${target.text}" berhasil!`, "info");
+    ctx.ui.notify("Ketik /rewind-undo untuk membatalkan", "info");
   } catch (error) {
     ctx.ui.notify(`Rewind gagal: ${error}`, "error");
   }

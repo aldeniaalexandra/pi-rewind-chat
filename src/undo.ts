@@ -1,36 +1,48 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { existsSync, copyFileSync, unlinkSync } from "fs";
+import { restoreCheckpoint } from "./checkpoints";
+import type { LastRewind } from "./rewind";
 
 /**
- * Execute undo of the last rewind.
- * Restores session from backup file.
+ * Execute undo of the most recent rewind still on the stack.
+ * Reverses both the code rollback (if any) and the chat branch move (if any).
+ * Calling this repeatedly walks back through prior rewinds one at a time.
  */
 export async function executeUndo(
   ctx: ExtensionCommandContext,
-  backupPathRef: { current: string | null },
+  rewindStack: LastRewind[],
 ): Promise<void> {
-  const sessionFile = ctx.sessionManager.getSessionFile();
+  const lastRewind = rewindStack.pop();
 
-  if (!sessionFile) {
-    ctx.ui.notify("No active session file found", "error");
-    return;
-  }
-
-  if (!backupPathRef.current || !existsSync(backupPathRef.current)) {
+  if (!lastRewind) {
     ctx.ui.notify("Tidak ada rewind yang bisa di-undo", "info");
     return;
   }
 
   try {
-    // Restore session from backup
-    copyFileSync(backupPathRef.current, sessionFile);
+    // 1. Undo code rollback: restore the pre-rewind snapshot
+    if (lastRewind.preRewindCheckpoint) {
+      await restoreCheckpoint(ctx.cwd, lastRewind.preRewindCheckpoint);
+      ctx.ui.notify("Code dikembalikan ke sebelum rewind", "info");
+    }
 
-    // Clean up backup
-    unlinkSync(backupPathRef.current);
-    backupPathRef.current = null;
+    // 2. Undo chat rewind: jump the leaf back to where it was
+    if (lastRewind.oldLeafId) {
+      const result = await ctx.navigateTree(lastRewind.oldLeafId, { label: "rewind-undo" });
+      if (!result.cancelled) {
+        ctx.ui.notify("Chat dikembalikan ke sebelum rewind", "info");
+      }
+    }
 
-    ctx.ui.notify("✓ Rewind berhasil di-undo! Restart session untuk lihat perubahan.", "info");
+    const remaining = rewindStack.length;
+    ctx.ui.notify(
+      remaining > 0
+        ? `Rewind berhasil di-undo! (${remaining} rewind lagi bisa di-undo)`
+        : "Rewind berhasil di-undo!",
+      "info",
+    );
   } catch (error) {
+    // Restore the popped entry so the user can retry the undo.
+    rewindStack.push(lastRewind);
     ctx.ui.notify(`Undo gagal: ${error}`, "error");
   }
 }

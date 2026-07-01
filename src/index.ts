@@ -2,11 +2,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { isGitRepo, createCheckpoint } from "./checkpoints";
 import type { CheckpointMap } from "./checkpoints";
 import { executeRewind } from "./rewind";
+import type { LastRewind } from "./rewind";
 import { executeUndo } from "./undo";
 
 export default function (pi: ExtensionAPI) {
   const checkpoints: CheckpointMap = new Map();
-  const backupPathRef = { current: null as string | null };
+  const rewindStack: LastRewind[] = [];
   let isGit = false;
 
   // Check git repo and load persisted checkpoints on session start
@@ -73,15 +74,15 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("Rewind hanya tersedia di git repository", "error");
         return;
       }
-      await executeRewind(args, ctx, checkpoints, backupPathRef);
+      await executeRewind(args, ctx, checkpoints, rewindStack);
     },
   });
 
   // Register /rewind-undo command
   pi.registerCommand("rewind-undo", {
-    description: "Undo the last rewind operation",
+    description: "Undo the last rewind operation (repeatable, undoes one rewind per call)",
     handler: async (_args, ctx) => {
-      await executeUndo(ctx, backupPathRef);
+      await executeUndo(ctx, rewindStack);
     },
   });
 }
